@@ -423,15 +423,14 @@ def drop_unnamed_columns(df):
     return df    
 
 
-def report_df_to_clearml(df, clearml_task, d_type=None, title=None):
-    logger = clearml_task.get_logger()
+def report_df_to_clearml(df, d_type=None, title=None):
     df.index.name = "id"
     if title is None:
         title = f"{d_type}_data_table"
         sub_title = "Final data files"
     else:
         sub_title = title
-    logger.report_table(
+    Logger.current_logger().report_table(
         f"{d_type}_{title}",
         sub_title, 
         iteration=0, 

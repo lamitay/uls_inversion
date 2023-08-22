@@ -5,16 +5,14 @@ import argparse
 import random
 import numpy as np
 
-# def extract_info(filename):
-#     seq_name = filename.split('.')[0]
-#     frame_num = 0
-#     if '_frame' in seq_name:
-#         seq_name, frame_num = seq_name.split('_frame')
-#     elif any(char.isdigit() for char in seq_name[-1]):
-#         seq_name, frame_num = seq_name.rstrip('0123456789'), seq_name[-1]
-#     return seq_name, int(frame_num)
-
 def extract_info(filename):
+    """
+    Extract sequence name and frame number from a given filename.
+
+    :param filename: Name of the file
+    :return: Tuple containing sequence name and frame number
+    """
+    # Split the filename based on '_frame' or '_image' to extract sequence name and frame number
     frame_num_part = ""
     if '_frame' in filename:
         seq_name, _, frame_num_part = filename.rpartition('_frame')
@@ -38,13 +36,25 @@ def extract_info(filename):
     return seq_name, frame_num
 
 def create_splits_with_handling(df, seq_column, label_column, train_size, val_size):
-    # Function to manually create train, validation, and test splits with handling for small classes
+    """
+    Create train, validation, and test splits, handling small classes.
+
+    :param df: DataFrame containing the data
+    :param seq_column: Column name for sequence identifier
+    :param label_column: Column name for labels
+    :param train_size: Proportion of training data
+    :param val_size: Proportion of validation data
+    :return: Lists containing training, validation, and test sequences
+    """
+    # Initialize lists for sequences
     train_seq = []
     val_seq = []
     test_seq = []
+    # Iterate through groups by label
     for label, group in df.groupby(label_column):
         unique_sequences = group[seq_column].unique()
         total_sequences = len(unique_sequences)
+        # Handle small classes differently
         if total_sequences <= 3:
             shuffled_sequences = list(np.random.permutation(unique_sequences))
             train_seq.append(shuffled_sequences.pop(0))
@@ -52,6 +62,7 @@ def create_splits_with_handling(df, seq_column, label_column, train_size, val_si
                 val_seq.append(shuffled_sequences.pop(0))
             test_seq.extend(shuffled_sequences)
         else:
+            # Shuffle and split sequences for train, validation, and test
             num_train = int(total_sequences * train_size)
             num_val = int(total_sequences * val_size)
             shuffled_sequences = np.random.permutation(unique_sequences)
@@ -61,9 +72,17 @@ def create_splits_with_handling(df, seq_column, label_column, train_size, val_si
     return train_seq, val_seq, test_seq
 
 def create_data_df(images_dir):
+    """
+    Create a DataFrame containing image data, including file path, sequence name, frame number, and label.
+
+    :param images_dir: Directory containing the images
+    :return: DataFrame with image data
+    """
+    # Initialize data and label dictionary
     data = []
     labels_dict = {}
     label_num = 0
+    # Iterate through labels and images
     for label_name in os.listdir(images_dir):
         label_path = os.path.join(images_dir, label_name)
         if os.path.isdir(label_path):
@@ -76,42 +95,32 @@ def create_data_df(images_dir):
                 width, height = Image.open(image_path).size
                 data.append([image_name, image_path, seq_name, frame_num, label_name, labels_dict[label_name], width, height])
 
+    # Create DataFrame and add data_type based on custom splits
     df = pd.DataFrame(data, columns=['image_name', 'image_path', 'seq_name', 'frame_num', 'label_name', 'label', 'width', 'height'])
-
-    # Apply the function to create train, validation, and test splits with handling for small classes
-    train_seq, val_seq, test_seq = create_splits_with_handling(df, 'seq_name', 'label_name', 0.7, 0.15)  # Fixed argument
-
-    # Assign the data_type based on the manual splits with handling
+    train_seq, val_seq, test_seq = create_splits_with_handling(df, 'seq_name', 'label_name', 0.7, 0.15)  # Custom splits
     df['data_type'] = 'test'
     df.loc[df['seq_name'].isin(train_seq), 'data_type'] = 'train'
     df.loc[df['seq_name'].isin(val_seq), 'data_type'] = 'val'
 
     return df
 
-
 if __name__ == "__main__":
+    # Argument parsing for command-line execution
     parser = argparse.ArgumentParser(description="Create a DataFrame from lung ultrasound data.")
     parser.add_argument("--images_dir", default="/home/lamitay/vscode_projects/covid19_ultrasound/data/image_dataset", help="Path to the directory containing the images.")
     args = parser.parse_args()
     df = create_data_df(args.images_dir)
 
-    # Group the DataFrame by data_type and label_name, and count the number of occurrences for each combination
+    # Analyzing distribution by data_type and label_name
     distribution_by_split_and_label = df.groupby(['data_type', 'label_name']).size().reset_index(name='count')
-
-    # Pivot the result to create a table that shows the count of occurrences for each label in each data_type
     distribution_pivot_table = distribution_by_split_and_label.pivot(index='label_name', columns='data_type', values='count')
-
-    # Fill any NaN values with 0 (in case some combinations are missing)
     distribution_pivot_table = distribution_pivot_table.fillna(0)
-
-    # Print the distribution table
     print(distribution_pivot_table)
 
-    # Define the file path for saving the CSV
-    distribution_csv_file_path = 'lung_uls_distribution.csv'
-
-    # Save the pivot table to the CSV file
-    distribution_pivot_table.to_csv(os.path.join(args.images_dir,distribution_csv_file_path))
+    # Saving distribution and DataFrame to CSV
+    distribution_csv_file_name = 'lung_uls_distribution.csv'
+    distribution_csv_file_path = os.path.join(args.images_dir,distribution_csv_file_name)
+    distribution_pivot_table.to_csv(distribution_csv_file_path)
     print(f"Distribution saved to {distribution_csv_file_path}")
 
     output_path = os.path.join(args.images_dir, 'lung_uls_data.csv')

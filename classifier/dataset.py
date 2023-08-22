@@ -1,17 +1,56 @@
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import wfdb
-import os
-import sys
-sys.path.append('Classifier')
-os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
-from clearml import Logger
-import matplotlib.pyplot as plt 
+import cv2
 import numpy as np
 import pandas as pd
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
+import os
 from utils import *
-import random
+
+
+class PreprocessTransform:
+    def __call__(self, image):
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.resize(image, (224, 224))
+        image = np.expand_dims(np.array(image), 0) / 255.0
+        return image
+
+class LungUltrasoundDataset(Dataset):
+    def __init__(self, d_type, dataframe, exp_dir, clearml_task=False, transform=None, debug_mode=False):
+        self.dataframe = dataframe
+        self.transform = transform
+
+        print('--------------------------------------------------------------')
+        print(f'Created {d_type} dataset with {len(self.dataframe)} frames')
+
+        if debug_mode:
+            DEBUG_SIZE = 10
+            self.dataframe = self.dataframe.sample(n=DEBUG_SIZE)
+            print(f'Debug mode, squeezed {d_type} data from {len(self.dataframe)} to {DEBUG_SIZE}')
+
+        if exp_dir:
+            df_out_path = os.path.join(exp_dir, 'dataframes', d_type+'_df.csv')
+            self.dataframe.to_csv(df_out_path, index=False)
+            print(f'Saved {d_type} dataframe to {df_out_path}')
+
+        if clearml_task:
+            report_df_to_clearml(self.dataframe, clearml_task, d_type)
+
+        print('--------------------------------------------------------------')
+
+        
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        img_path = self.dataframe.iloc[idx]['image_path']
+        label = self.dataframe.iloc[idx]['label']
+        image = cv2.imread(img_path)
+        
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
 
 
 class AF_dataset(Dataset):
