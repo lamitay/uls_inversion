@@ -1,0 +1,1 @@
+This part of the code is used to synthetically generate samples of lung ultrasound images using textual inversion.
