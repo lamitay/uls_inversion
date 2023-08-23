@@ -1,12 +1,7 @@
 import torch
-import wfdb
 from datetime import datetime
 import os
 import numpy as np
-from pecg import Preprocessing as Pre
-from pecg.ecg import FiducialPoints as Fp
-from wfdb import processing
-import yaml
 from torchsummary import summary
 from fvcore.nn import flop_count, FlopCountAnalysis, flop_count_table
 import pandas as pd
@@ -22,8 +17,6 @@ import plotly.io as pio
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 from tqdm import tqdm
-
-os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 
 def build_exp_dirs(exp_base_path, exp_name):
@@ -41,35 +34,26 @@ def build_exp_dirs(exp_base_path, exp_name):
 
     return exp_dir
 
-
-def print_model_summary(model, batch_size, num_ch=1, samp_per_record=2500, device='cpu'):
+def print_model_summary(model, batch_size, num_ch=3, image_size=(224, 224), device='cpu'):
     """
-    Prints the model summary including the model architecture, number of parameters,
-    and the total number of FLOPs (Floating Point Operations) required for a given input size.
+    Prints the model summary for ultrasound images.
 
     Args:
         model (torch.nn.Module): The PyTorch model to summarize.
         batch_size (int): The batch size used for computing FLOPs.
-        num_ch (int, optional): The number of input channels. Defaults to 1.
-        samp_per_record (int, optional): The number of samples per record. Defaults to 2500.
-        device (string, optional):   
-
-    Example:
-        >>> model = MyModel()
-        >>> batch_size = 64
-        >>> num_ch = 1
-        >>> samp_per_record = 2500
-        >>> print_model_summary(model, batch_size, num_ch, samp_per_record)
-        Output: Prints the model summary, parameter count, and total number of FLOPs.
+        num_ch (int, optional): The number of input channels (e.g., 3 for RGB). Defaults to 3.
+        image_size (tuple, optional): The height and width of the input images. Defaults to (224, 224).
+        device (string, optional): The device to run the computation on. Defaults to 'cpu'.
     """
-    summary(model.to(device), input_size=(num_ch, samp_per_record), device=device)
+    summary(model.to(device), input_size=(num_ch, *image_size), device=device)
     # Create a sample input tensor
-    input_size = (batch_size, num_ch, samp_per_record)
+    input_size = (batch_size, num_ch, *image_size)
     rand_inputs = torch.randn(*input_size).to(device)
     # Compute FLOPs
     flops = FlopCountAnalysis(model, rand_inputs)
     print(flop_count_table(flops))
     print(f"Total number of FLOPs: {humanize_number(flops.total())} Flops")
+
 
 def humanize_number(number):
     """

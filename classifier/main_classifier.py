@@ -43,15 +43,17 @@ def main(args):
     model_type = args.model_type
     pretrained = args.pretrained
     num_layers_to_fine_tune = args.num_layers_to_fine_tune
+    debug = args.debug
+    epochs = args.epochs
+    early_stopping = args.early_stopping
+    device_num = args.device_num
 
     # Initialize experiment name and dirs
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
-    exp_full_name = f"{exp_name}_{timestamp}"
+    exp_full_name = f"{exp_name}_{model_type}_{timestamp}"
     exp_dir = build_exp_dirs(exp_base_dir, exp_full_name)
     if clearml:
         clearml_task = Task.init(project_name="uls_inversion/classifier", task_name=exp_full_name)
-    else:
-        clearml_task=0
 
     # Load the ultrasound DataFrame
     df = pd.read_csv(os.path.join(data_dir, uls_df_name), index_col=None)
@@ -75,19 +77,19 @@ def main(args):
                                           exp_dir=exp_dir, 
                                           clearml=clearml, 
                                           transform=preprocess_transform, 
-                                          debug_mode=False)
+                                          debug_mode=debug)
     val_dataset = LungUltrasoundDataset(d_type='val', 
                                         dataframe=df, 
                                         exp_dir=exp_dir, 
                                         clearml=clearml, 
                                         transform=preprocess_transform, 
-                                        debug_mode=False)
+                                        debug_mode=debug)
     test_dataset = LungUltrasoundDataset(d_type='test', 
                                          dataframe=df, 
                                          exp_dir=exp_dir, 
                                          clearml=clearml, 
                                          transform=preprocess_transform, 
-                                         debug_mode=False)
+                                         debug_mode=debug)
 
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS)
@@ -95,7 +97,8 @@ def main(args):
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS)
 
     # Model and optimizers config
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    cuda_num = f"cuda:{device_num}"
+    device = torch.device(cuda_num if torch.cuda.is_available() else "cpu")
 
     # Model selection and configuration
     if model_type == 'resnet':
@@ -103,8 +106,9 @@ def main(args):
         penultimate_layer = model.fc.in_features
         model.fc = nn.Linear(penultimate_layer, NUM_CLASSES)
     elif model_type == 'vit':
-        model = models.vision_transformer.vit_small_patch16_224(pretrained=pretrained)
-        penultimate_layer = model.head.in_features
+        # model = models.vision_transformer.vit_small_patch16_224(pretrained=pretrained)
+        model = models.vit_b_16(weights=['ViT_B_16_Weights'])
+        penultimate_layer = model.heads.head.in_features
         model.head = nn.Linear(penultimate_layer, NUM_CLASSES)
     elif model_type == 'efficient_net':
         model = timm.create_model('efficientnet_b0', pretrained=pretrained, num_classes=NUM_CLASSES)
@@ -119,7 +123,7 @@ def main(args):
         for param in list(model.parameters())[-num_layers_to_fine_tune:]:
             param.requires_grad = True
     
-    print_model_summary(model, batch_size, device='cpu')
+    # print_model_summary(model, batch_size, device='cpu')
     
     # Set up final parts of experiment
     model.to(device)
@@ -127,12 +131,12 @@ def main(args):
     if optimizer == 'AdamW':
         optimizer = optim.AdamW(model.parameters(), lr=lr)
     if loss == 'ce':    
-        criterion = F.cross_entropy
+        criterion = nn.CrossEntropyLoss()
     if lr_scheduler == 'ReduceLROnPlateau':
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, verbose=True)
     
     # Training
-    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, config, clearml_task, data_folder_path)
+    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping)
     print('Started training!')
     trainer.train()
     print('Finished training, Started test set evaluation!')
@@ -145,16 +149,23 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='/home/lamitay/vscode_projects/covid19_ultrasound/data/image_dataset', help='Path to the ultrasound data')
     parser.add_argument('--uls_df_name', type=str, default='lung_uls_data.csv', help='Ultrasound data name')
     parser.add_argument('--exp_base_dir', type=str, default='/home/lamitay/uls_experiments', help='Path to the ultrasound experiments directory')
-    parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument('--loss', type=str, default='ce', help='Loss function name, can be - ce')
-    parser.add_argument('--model_type', type=str, default='resnet', help='Model type, can be - resnet/vit/efficient_net')
+    parser.add_argument('--model_type', type=str, default='vit', help='Model type, can be - resnet/vit/efficient_net')
     parser.add_argument('--pretrained', type=bool, default=True, help='Use imagenet pretrained weights')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Optimizer name, can be - AdamW')
     parser.add_argument('--lr_scheduler', type=str, default='ReduceLROnPlateau', help='LR scheduler name, can be - ReduceLROnPlateau')
+    parser.add_argument('--early_stopping', type=int, default=10, help='If greater than 0, perform early stopping patience')
     parser.add_argument('--lr', type=int, default=1e-4, help='Learning rate')
+    parser.add_argument('--device_num', type=int, default='0', help='Cuda device to use')
+    parser.add_argument('--num_layers_to_fine_tune', type=int, default=-1, help='If greater than 0, fine tune only this amount of final layers, otherwise train all layers')
+    parser.add_argument('--debug', type=bool, default=False, help='Debug mode flag')
     parser.add_argument('--clearml', type=bool, default=True, help='Create and log experiment to clearml')
     parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
-    parser.add_argument('--num_layers_to_fine_tune', type=int, default=-1, help='If greater than 0, fine tune only this amount of final layers, otherwise train all layers')
+
+
+
     args = parser.parse_args()
 
     main(args)

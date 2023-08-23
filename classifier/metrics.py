@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from clearml import Task, Logger
+from clearml import Logger
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, classification_report, roc_curve, auc, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score, precision_recall_curve, PrecisionRecallDisplay, RocCurveDisplay
+from sklearn.preprocessing import label_binarize
 import os
 import seaborn as sns
 import pandas as pd
@@ -16,8 +17,15 @@ class Metrics:
         precision = precision_score(true_labels, predicted_labels, average='weighted')
         recall = recall_score(true_labels, predicted_labels, average='weighted')
         f1 = f1_score(true_labels, predicted_labels, average='weighted')
-        auroc = roc_auc_score(true_labels, probas)
-        avg_prec = average_precision_score(true_labels, probas)
+
+        # Convert true_labels to one-hot encoding
+        n_classes = len((probas[0]))
+        true_labels_one_hot = label_binarize(true_labels, classes=np.arange(n_classes))
+
+        # Compute ROC AUC score
+        # auroc = roc_auc_score(true_labels_one_hot, probas, multi_class='ovr')  # or multi_class='ovo' based on preference
+        auroc = 0
+        avg_prec = average_precision_score(true_labels_one_hot, probas, average='macro') # or 'micro', 'weighted' based on preference
 
         # Log metrics 
         Metrics.log_metric(d_type, epoch, 'Accuracy', accuracy, clearml, results_dir)
