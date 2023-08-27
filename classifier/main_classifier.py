@@ -50,7 +50,7 @@ def main(args):
 
     # Initialize experiment name and dirs
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
-    exp_full_name = f"{exp_name}_{model_type}_{timestamp}"
+    exp_full_name = f"{exp_name}_{model_type}_pretrained_{pretrained}_lr_{lr}_{timestamp}"
     exp_dir = build_exp_dirs(exp_base_dir, exp_full_name)
     if clearml:
         clearml_task = Task.init(project_name="uls_inversion/classifier", task_name=exp_full_name)
@@ -101,13 +101,16 @@ def main(args):
     device = torch.device(cuda_num if torch.cuda.is_available() else "cpu")
 
     # Model selection and configuration
-    if model_type == 'resnet':
-        model = models.resnet18(pretrained=pretrained)
+    if model_type == 'resnet50':
+        model = models.resnet50(pretrained=pretrained)
         penultimate_layer = model.fc.in_features
         model.fc = nn.Linear(penultimate_layer, NUM_CLASSES)
     elif model_type == 'vit':
         # model = models.vision_transformer.vit_small_patch16_224(pretrained=pretrained)
-        model = models.vit_b_16(weights=['ViT_B_16_Weights'])
+        if pretrained:
+            model = models.vit_b_16(weights=['ViT_B_16_Weights'])
+        else:
+            model = models.vit_b_16()
         penultimate_layer = model.heads.head.in_features
         model.head = nn.Linear(penultimate_layer, NUM_CLASSES)
     elif model_type == 'efficient_net':
@@ -152,16 +155,16 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument('--loss', type=str, default='ce', help='Loss function name, can be - ce')
-    parser.add_argument('--model_type', type=str, default='vit', help='Model type, can be - resnet/vit/efficient_net')
-    parser.add_argument('--pretrained', type=bool, default=True, help='Use imagenet pretrained weights')
+    parser.add_argument('--model_type', type=str, default='vit', help='Model type, can be - resnet50/vit/efficient_net')
+    parser.add_argument('--pretrained', action='store_true', default=False, help='Use imagenet pretrained weights')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Optimizer name, can be - AdamW')
     parser.add_argument('--lr_scheduler', type=str, default='ReduceLROnPlateau', help='LR scheduler name, can be - ReduceLROnPlateau')
     parser.add_argument('--early_stopping', type=int, default=10, help='If greater than 0, perform early stopping patience')
-    parser.add_argument('--lr', type=int, default=1e-4, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--device_num', type=int, default='0', help='Cuda device to use')
     parser.add_argument('--num_layers_to_fine_tune', type=int, default=-1, help='If greater than 0, fine tune only this amount of final layers, otherwise train all layers')
-    parser.add_argument('--debug', type=bool, default=False, help='Debug mode flag')
-    parser.add_argument('--clearml', type=bool, default=True, help='Create and log experiment to clearml')
+    parser.add_argument('--debug', action='store_true', default=False, help='Debug mode flag')
+    parser.add_argument('--clearml', action='store_true', default=True, help='Create and log experiment to clearml')
     parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
 
 

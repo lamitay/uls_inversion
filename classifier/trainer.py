@@ -98,11 +98,13 @@ class Trainer:
                 f'\tAverage Train Loss: {train_loss:.4f}'
                 f'\tAverage Validation Loss: {val_loss:.4f}')
             
+            current_lr = self.optimizer.param_groups[0]['lr']
+            
             # ClearML logging
             if self.clearml:
                 self.logger.report_scalar(title="Epoch Loss", series="Training Loss", value=train_loss, iteration=epoch)
                 self.logger.report_scalar(title="Epoch Loss", series="Validation Loss", value=val_loss, iteration=epoch)
-                self.logger.report_scalar(title="Learning Rate", series="lr", value=self.scheduler.get_last_lr()[0], iteration=epoch)
+                self.logger.report_scalar(title="Learning Rate", series="lr", value=current_lr, iteration=epoch)
 
             if val_loss < best_loss:
                 best_loss = val_loss
