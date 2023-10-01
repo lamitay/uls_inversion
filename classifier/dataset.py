@@ -22,9 +22,28 @@ from utils import *
 #         return (tensor - torch.min(tensor)) / (torch.max(tensor) - torch.min(tensor))
 
 class LungUltrasoundDataset(Dataset):
-    def __init__(self, d_type, dataframe, exp_dir, clearml=False, transform=None, debug_mode=False):
+    def __init__(self, d_type, dataframe, exp_dir, clearml=False, transform=None, debug_mode=False, synthetic_df=None, synthetic_perc=0):
         self.dataframe = dataframe[dataframe['data_type'] == d_type]
         self.transform = transform
+        
+        # Add synthetic data to the training set
+        if d_type == 'train' and synthetic_df is not None:
+            self.orig_synthetic_df = synthetic_df
+            tot_viral = len(dataframe[dataframe['label_name'] == 'viral'])  # Get the number of 'viral' samples
+            if synthetic_perc > 0:
+                n_synth = int((synthetic_perc / 100) * tot_viral)
+                self.sampled_synthetic_df = self.orig_synthetic_df.sample(n=n_synth, replace=True)  # Sample with replacement for oversampling
+                # Add 'data_type' column to synthetic_df
+                self.sampled_synthetic_df['data_type'] = 'train'
+                print(f'Added {n_synth} frames to the data.')
+
+                # Select only the relevant columns
+                self.dataframe = self.dataframe[['image_path', 'label', 'label_name', 'data_type']]
+                self.sampled_synthetic_df = self.sampled_synthetic_df[['image_path', 'label', 'label_name', 'data_type']]
+
+                # Concatenate the DataFrames
+                self.dataframe = pd.concat([self.dataframe, self.sampled_synthetic_df], ignore_index=True)
+
 
         print('--------------------------------------------------------------')
         print(f'Created {d_type} dataset with {len(self.dataframe)} frames')

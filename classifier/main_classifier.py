@@ -47,6 +47,8 @@ def main(args):
     epochs = args.epochs
     early_stopping = args.early_stopping
     device_num = args.device_num
+    synthetic_df_path = args.synthetic_df_path
+    synthetic_perc = args.synthetic_perc
 
     # Initialize experiment name and dirs
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
@@ -57,6 +59,9 @@ def main(args):
 
     # Load the ultrasound DataFrame
     df = pd.read_csv(os.path.join(data_dir, uls_df_name), index_col=None)
+
+    if synthetic_df_path is not None:
+        synthetic_df = pd.read_csv(synthetic_df_path, index_col=None)
 
     # Define the input size and ImageNet mean and std based on the model type
     input_size = 224
@@ -77,7 +82,9 @@ def main(args):
                                           exp_dir=exp_dir, 
                                           clearml=clearml, 
                                           transform=preprocess_transform, 
-                                          debug_mode=debug)
+                                          debug_mode=debug,
+                                          synthetic_df=synthetic_df, 
+                                          synthetic_perc=synthetic_perc)
     val_dataset = LungUltrasoundDataset(d_type='val', 
                                         dataframe=df, 
                                         exp_dir=exp_dir, 
@@ -166,6 +173,9 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode flag')
     parser.add_argument('--clearml', action='store_true', default=True, help='Create and log experiment to clearml')
     parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
+    parser.add_argument('--synthetic_df_path', type=str, default=None, help='Path to the synthetic data df')
+    parser.add_argument('--synthetic_perc', type=float, default=0, help='Percent of synthetic data to add to the viral class training set')
+
 
 
 
