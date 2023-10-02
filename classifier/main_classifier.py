@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from clearml import Task
 from utils import *
-from trainer import Trainer
+from classifier.init_embeddings_trainer import Trainer
 from model import EcgResNet34
 from dataset import *
 import random
@@ -146,7 +146,7 @@ def main(args):
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, verbose=True)
     
     # Training
-    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping)
+    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type)
     print('Started training!')
     trainer.train()
     print('Finished training, Started test set evaluation!')

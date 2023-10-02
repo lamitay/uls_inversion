@@ -37,9 +37,12 @@ class LungUltrasoundDataset(Dataset):
                 self.sampled_synthetic_df['data_type'] = 'train'
                 print(f'Added {n_synth} frames to the data.')
 
+                self.sampled_synthetic_df['fake'] = 1
+                self.dataframe['fake'] = 0
+
                 # Select only the relevant columns
-                self.dataframe = self.dataframe[['image_path', 'label', 'label_name', 'data_type']]
-                self.sampled_synthetic_df = self.sampled_synthetic_df[['image_path', 'label', 'label_name', 'data_type']]
+                self.dataframe = self.dataframe[['image_path', 'label', 'label_name', 'data_type', 'fake']]
+                self.sampled_synthetic_df = self.sampled_synthetic_df[['image_path', 'label', 'label_name', 'data_type', 'fake']]
 
                 # Concatenate the DataFrames
                 self.dataframe = pd.concat([self.dataframe, self.sampled_synthetic_df], ignore_index=True)
@@ -82,9 +85,9 @@ class LungUltrasoundDataset(Dataset):
         img_path = self.dataframe.iloc[idx]['image_path']
         label = self.dataframe.iloc[idx]['label']
         image = cv2.imread(img_path)
-        
+        meta_data = self.dataframe.iloc[idx]
         if self.transform:
             image = self.transform(image)
 
-        return image, label
+        return (image, label), meta_data.to_dict()
     
