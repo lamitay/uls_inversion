@@ -12,10 +12,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import numpy as np
 from metrics import Metrics
 import pandas as pd
-from utils import create_and_save_embeddings
 
 class Trainer:
-    def __init__(self, model, exp_dir, train_loader, validation_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type, get_embedd):
+    def __init__(self, model, exp_dir, train_loader, validation_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type):
         self.model = model
         self.exp_dir = exp_dir
         self.train_loader = train_loader
@@ -27,15 +26,18 @@ class Trainer:
         self.scheduler = scheduler
         self.class_labels = ['covid', 'pneumonia', 'regular', 'viral']
         self.results_dir = os.path.join(exp_dir, 'results')
-        self.embeddings_dir = os.path.join(self.results_dir, 'embeddings')
         self.logger = None
         self.data_dir = data_dir
         self.clearml = clearml
         self.debug = debug
         self.early_stopping = early_stopping
-        self.model_type = model_type
-        self.get_embedd = get_embedd
-
+        self.model_type = model_type  
+        self.train_embeddings = []  
+        self.val_embeddings = []  
+        self.test_embeddings = [] 
+        self.embedding_hook = None
+        self.register_embedding_hook()  
+        
         DEBUG_EPOCHS = 3
 
         if self.debug:
@@ -45,7 +47,22 @@ class Trainer:
         
         if self.clearml:
             self.logger = Logger.current_logger()
+    
+    def register_embedding_hook(self):
+        def hook_fn(module, input, output):
+            self.embedding_hook = output.cpu().detach().numpy()
 
+        # Register the hook based on the model type
+        if self.model_type == 'resnet50':
+            self.model.layer4[-1].register_forward_hook(hook_fn)
+        elif self.model_type == 'vit':
+            self.model.head.register_forward_hook(hook_fn)
+        elif self.model_type == 'efficient_net':
+            self.model.conv_head.register_forward_hook(hook_fn)
+
+    def save_embeddings(self, embeddings, filename):
+        embeddings = np.vstack(embeddings)
+        np.save(os.path.join(self.results_dir, filename), embeddings)
 
     def save_model(self, epoch):
         model_name = f"epoch_{epoch}_model.pth"
@@ -85,7 +102,11 @@ class Trainer:
                 targets = targets.to(self.device)
 
                 self.optimizer.zero_grad()
+                self.embedding_hook = None 
                 outputs = self.model(inputs)
+                train_embeddings = self.embedding_hook  
+                self.train_embeddings.append(train_embeddings)  
+
                 loss = self.criterion(outputs, targets)
 
                 total_train_loss += loss.item() * inputs.size(0)
@@ -96,6 +117,8 @@ class Trainer:
 
             train_loss = total_train_loss / num_train_examples
             val_loss = self.evaluate('validation', epoch)
+
+            self.save_embeddings(self.train_embeddings, 'train_embeddings.npy') 
 
             # Print epoch results
             print(f'Train Epoch: {epoch}'
@@ -127,9 +150,6 @@ class Trainer:
 
         self.save_model(epoch=epoch)
 
-        if self.get_embedd:
-            create_and_save_embeddings(self.model, self.model_type, self.train_loader, self.embeddings_dir, 'Train', self.device)
-
 
 
     def evaluate(self, data_type, epoch=0, ckpt=None, different_exp_dir = None):
@@ -152,8 +172,15 @@ class Trainer:
             for (inputs, targets), meta_data in tqdm(loader):
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
-
+                
+                self.embedding_hook = None  
                 outputs = self.model(inputs)
+                eval_embeddings = self.embedding_hook 
+                if data_type == 'validation':
+                    self.val_embeddings.append(eval_embeddings)  
+                elif data_type == 'test':
+                    self.test_embeddings.append(eval_embeddings) 
+                
                 loss = self.criterion(outputs, targets)
 
                 total_eval_loss += loss.item() * inputs.size(0)
@@ -170,6 +197,12 @@ class Trainer:
                 predicted_labels.extend(thresholded_predictions)
                 predicted_probas.extend(predicted_probabilities)
 
+        # Save embeddings
+        if data_type == 'validation':
+                self.save_embeddings(self.val_embeddings, 'val_embeddings.npy')
+        elif data_type == 'test':
+                self.save_embeddings(self.test_embeddings, 'test_embeddings.npy') 
+        
         # Calculate Loss
         eval_loss = total_eval_loss / num_examples
         
@@ -184,9 +217,6 @@ class Trainer:
         if data_type == 'test':
             # Plot and log confusion matrix
             Metrics.plot_and_log_confusion_matrix(confusion_mat, self.class_labels, self.logger, self.clearml, results_dir)
-
-            if self.get_embedd:
-                create_and_save_embeddings(self.model, self.model_type, loader, self.embeddings_dir, data_type, self.device)
 
             # # Plot ROC curve and log it to ClearML
             # Metrics.plot_roc_curve(true_labels, predicted_probas, self.logger, self.clearml, results_dir)
@@ -203,6 +233,5 @@ class Trainer:
             # # Save 15 images of the networks correct predictions
             # Metrics.save_correct_images(true_labels, predicted_labels, self.data_dir, results_dir)
             # print('Finished saving correct images')
-        
-        
+
         return eval_loss

@@ -17,6 +17,8 @@ import plotly.io as pio
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 from tqdm import tqdm
+from torch.nn.functional import softmax
+
 
 
 def build_exp_dirs(exp_base_path, exp_name):
@@ -148,7 +150,7 @@ def load_latest_model(model, path):
 
 
 
-def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, device, clsfr_th=0.75):
+def create_and_save_embeddings(model, model_type, data_loader, embeddings_dir, d_type, device, clsfr_th=0.75):
     '''
     This function creates and saves embeddings using PCA and t-SNE for a given model, d_type and data loader.
     The outputs are saved npy, csv, png and html files of the embeddings.
@@ -157,30 +159,47 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
     labels = []
     preds = []
     fakes = []
-    intervals = []
+    paths = []
+
+    # Register the hook based on the model type
+    if model_type == 'resnet50':
+        layer = model.layer4  # The penultimate layer for ResNet50
+    elif model_type == 'vit':
+        layer = model.blocks[-1]  # The penultimate layer for ViT
+    elif model_type == 'efficient_net':
+        layer = model._blocks[-1]  # The penultimate layer for EfficientNet
+
+    def hook(module, input, output):
+        output = output.detach().cpu().numpy()
+        embeddings.append(output)
+
+    handle = layer.register_forward_hook(hook)
 
     with torch.no_grad():
         for (inputs, targets), meta_data in tqdm(data_loader, desc=f"Processing {d_type} set"):
-            inputs = inputs.to(device).squeeze(1)
-            targets = targets.to(device).float()
+            inputs = inputs.to(device)
+            targets = targets.to(device)
 
-            embedding = model(inputs, return_embedding=True)
-            outputs = model(inputs).squeeze(1)
+            outputs = model(inputs)
             
-            # Threshold the predictions
-            thresholded_predictions = np.where(outputs.cpu().numpy() >= clsfr_th, 1, 0)        
+            # Get predicted labels using argmax
+            thresholded_predictions = outputs.argmax(dim=1).cpu().numpy()
 
-            embeddings.append(embedding.cpu().numpy())
+            # Apply softmax to get predicted probabilities
+            predicted_probabilities = softmax(outputs, dim=1).cpu().numpy()         
+
             labels.append(targets.cpu().numpy())
             preds.append(thresholded_predictions.astype(int))
             fakes.append(meta_data['fake'])
-            intervals.append(meta_data['interval_path'])
+            paths.append(meta_data['image_path'])
+    
+    handle.remove() # Unregister the hook
 
     embeddings = np.concatenate(embeddings)
     labels = np.concatenate(labels)
     preds = np.concatenate(preds)
     fakes = np.concatenate(fakes)
-    intervals = np.concatenate(intervals)
+    paths = np.concatenate(paths)
 
     # Save the embeddings
     np.save(os.path.join(embeddings_dir, f'{d_type}_embeddings.npy'), embeddings)
@@ -197,7 +216,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
     df['label'] = labels
     df['prediction'] = preds
     df['fake'] = fakes
-    df['interval_path'] = intervals
+    df['image_path'] = paths
 
     # Save the DataFrame
     df.to_csv(os.path.join(embeddings_dir, f'{d_type}_embeddings_reduced_PCA.csv'), index=False)
@@ -206,7 +225,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
     fig1 = px.scatter(df, x='component1', y='component2',
                       symbol=df['fake'].map({0: "cross", 1: "circle"}),  # Different symbols for 'fake' status
                       color='label',  # Coloring according to the label values
-                      hover_data=['label', 'prediction', 'fake', 'interval_path'])
+                      hover_data=['label', 'prediction', 'fake', 'image_path'])
 
     # Save the figure as an HTML file
     pio.write_html(fig1, os.path.join(embeddings_dir, f'label_embeddings_{d_type}_PCA_2d.html'))
@@ -219,7 +238,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
         fig2 = px.scatter(df, x='component1', y='component2',
                           symbol=df['fake'].map({0: "cross", 1: "circle"}),  # Different symbols for 'fake' status
                           color='fake',  # Coloring according to the label values
-                          hover_data=['label', 'prediction', 'fake', 'interval_path'])
+                          hover_data=['label', 'prediction', 'fake', 'image_path'])
 
         # Save the figure as an HTML file
         pio.write_html(fig2, os.path.join(embeddings_dir, f'fake_embeddings_{d_type}_PCA_2d.html'))
@@ -238,7 +257,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
     df_tsne['label'] = labels
     df_tsne['prediction'] = preds
     df_tsne['fake'] = fakes
-    df_tsne['interval_path'] = intervals
+    df_tsne['image_path'] = paths
 
     # Save the DataFrame
     df_tsne.to_csv(os.path.join(embeddings_dir, f'{d_type}_embeddings_reduced_tSNE.csv'), index=False)
@@ -246,7 +265,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
     fig3 = px.scatter(df_tsne, x='component1', y='component2',
                       symbol=df_tsne['fake'].map({0: "cross", 1: "circle"}),  # Different symbols for 'fake' status
                       color='label',  # Coloring according to the label values
-                      hover_data=['label', 'prediction', 'fake', 'interval_path'])
+                      hover_data=['label', 'prediction', 'fake', 'image_path'])
 
     pio.write_html(fig3, os.path.join(embeddings_dir, f'label_embeddings_{d_type}_tSNE_2d.html'))
     fig3.write_image(os.path.join(embeddings_dir, f'label_embeddings_{d_type}_tSNE_2d.png'))
@@ -255,7 +274,7 @@ def create_and_save_embeddings(model, data_loader, embeddings_dir, d_type, devic
         fig4 = px.scatter(df_tsne, x='component1', y='component2',
                           symbol=df_tsne['fake'].map({0: "cross", 1: "circle"}),  # Different symbols for 'fake' status
                           color='fake',  # Coloring according to the label values
-                          hover_data=['label', 'prediction', 'fake', 'interval_path'])
+                          hover_data=['label', 'prediction', 'fake', 'image'])
 
         pio.write_html(fig4, os.path.join(embeddings_dir, f'fake_embeddings_{d_type}_tSNE_2d.html'))
 

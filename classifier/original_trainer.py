@@ -12,10 +12,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import numpy as np
 from metrics import Metrics
 import pandas as pd
-from utils import create_and_save_embeddings
 
 class Trainer:
-    def __init__(self, model, exp_dir, train_loader, validation_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type, get_embedd):
+    def __init__(self, model, exp_dir, train_loader, validation_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping):
         self.model = model
         self.exp_dir = exp_dir
         self.train_loader = train_loader
@@ -27,15 +26,12 @@ class Trainer:
         self.scheduler = scheduler
         self.class_labels = ['covid', 'pneumonia', 'regular', 'viral']
         self.results_dir = os.path.join(exp_dir, 'results')
-        self.embeddings_dir = os.path.join(self.results_dir, 'embeddings')
         self.logger = None
         self.data_dir = data_dir
         self.clearml = clearml
         self.debug = debug
         self.early_stopping = early_stopping
-        self.model_type = model_type
-        self.get_embedd = get_embedd
-
+        
         DEBUG_EPOCHS = 3
 
         if self.debug:
@@ -80,7 +76,7 @@ class Trainer:
             self.model.train()
             total_train_loss = 0.0
             num_train_examples = 0  
-            for (inputs, targets), meta_data in tqdm(self.train_loader):
+            for inputs, targets in tqdm(self.train_loader):
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
 
@@ -127,9 +123,6 @@ class Trainer:
 
         self.save_model(epoch=epoch)
 
-        if self.get_embedd:
-            create_and_save_embeddings(self.model, self.model_type, self.train_loader, self.embeddings_dir, 'Train', self.device)
-
 
 
     def evaluate(self, data_type, epoch=0, ckpt=None, different_exp_dir = None):
@@ -149,7 +142,7 @@ class Trainer:
         predicted_probas = []
 
         with torch.no_grad():
-            for (inputs, targets), meta_data in tqdm(loader):
+            for inputs, targets in tqdm(loader):
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
 
@@ -185,9 +178,6 @@ class Trainer:
             # Plot and log confusion matrix
             Metrics.plot_and_log_confusion_matrix(confusion_mat, self.class_labels, self.logger, self.clearml, results_dir)
 
-            if self.get_embedd:
-                create_and_save_embeddings(self.model, self.model_type, loader, self.embeddings_dir, data_type, self.device)
-
             # # Plot ROC curve and log it to ClearML
             # Metrics.plot_roc_curve(true_labels, predicted_probas, self.logger, self.clearml, results_dir)
 
@@ -203,6 +193,5 @@ class Trainer:
             # # Save 15 images of the networks correct predictions
             # Metrics.save_correct_images(true_labels, predicted_labels, self.data_dir, results_dir)
             # print('Finished saving correct images')
-        
-        
+
         return eval_loss
