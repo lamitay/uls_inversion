@@ -8,8 +8,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from clearml import Task
 from utils import *
-from classifier.init_embeddings_trainer import Trainer
-from model import EcgResNet34
+from trainer import Trainer
 from dataset import *
 import random
 from datetime import datetime
@@ -49,10 +48,11 @@ def main(args):
     device_num = args.device_num
     synthetic_df_path = args.synthetic_df_path
     synthetic_perc = args.synthetic_perc
+    get_embedd = args.get_embedd
 
     # Initialize experiment name and dirs
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
-    exp_full_name = f"{exp_name}_{model_type}_pretrained_{pretrained}_lr_{lr}_{timestamp}"
+    exp_full_name = f"{exp_name}_{model_type}_synthetic_perc_{synthetic_perc}_pretrained_{pretrained}_lr_{lr}_{timestamp}"
     exp_dir = build_exp_dirs(exp_base_dir, exp_full_name)
     if clearml:
         clearml_task = Task.init(project_name="uls_inversion/classifier", task_name=exp_full_name)
@@ -62,6 +62,8 @@ def main(args):
 
     if synthetic_df_path is not None:
         synthetic_df = pd.read_csv(synthetic_df_path, index_col=None)
+    else:
+        synthetic_df = None
 
     # Define the input size and ImageNet mean and std based on the model type
     input_size = 224
@@ -144,7 +146,7 @@ def main(args):
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, verbose=True)
     
     # Training
-    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type)
+    trainer = Trainer(model, exp_dir, train_loader, val_loader, test_loader, optimizer, criterion, scheduler, device, clearml, debug, epochs, data_dir, early_stopping, model_type, get_embedd)
     print('Started training!')
     trainer.train()
     print('Finished training, Started test set evaluation!')
@@ -156,7 +158,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Classifier Trainer')
     parser.add_argument('--data_dir', type=str, default='/home/lamitay/vscode_projects/covid19_ultrasound/data/image_dataset', help='Path to the ultrasound data')
     parser.add_argument('--uls_df_name', type=str, default='lung_uls_data.csv', help='Ultrasound data name')
-    parser.add_argument('--exp_base_dir', type=str, default='/home/lamitay/uls_experiments', help='Path to the ultrasound experiments directory')
+    parser.add_argument('--exp_base_dir', type=str, default='/home/lamitay/uls_experiments/classifier', help='Path to the ultrasound experiments directory')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument('--loss', type=str, default='ce', help='Loss function name, can be - ce')
@@ -170,9 +172,13 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers_to_fine_tune', type=int, default=-1, help='If greater than 0, fine tune only this amount of final layers, otherwise train all layers')
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode flag')
     parser.add_argument('--clearml', action='store_true', default=True, help='Create and log experiment to clearml')
-    parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
-    parser.add_argument('--synthetic_df_path', type=str, default=None, help='Path to the synthetic data df')
-    parser.add_argument('--synthetic_perc', type=float, default=0, help='Percent of synthetic data to add to the viral class training set')
+    # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
+    # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_ddpm-viral_3_mix_images', help='Current experiment name')
+    # parser.add_argument('--synthetic_df_path', type=str, default='/home/lamitay/uls_experiments/ddpm/inference_1000_samples_ddpm-viral_3_mix_images_uls-128_3000_epochs_23_09_2023-13_56_11/synthetic_viral_uls_data_ddpm-viral_3_mix_images_uls-128_3000_epochs.csv', help='Path to the synthetic data df')
+    parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_ddpm-viral_uls', help='Current experiment name')
+    parser.add_argument('--synthetic_df_path', type=str, default='/home/lamitay/uls_experiments/ddpm/inference_1000_samples_ddpm-viral_uls-128_2000_epochs_23_09_2023-13_56_04/synthetic_viral_uls_data_ddpm-ddpm-viral_uls-128_2000_epochs.csv', help='Path to the synthetic data df')
+    parser.add_argument('--synthetic_perc', type=float, default=100, help='Percent of synthetic data to add to the viral class training set')
+    parser.add_argument('--get_embedd', action='store_true', default=False, help='Create and save embeddings')
 
 
 

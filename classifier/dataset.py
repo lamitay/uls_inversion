@@ -9,18 +9,6 @@ import torch
 from utils import *
 
 
-# class PreprocessTransform:
-#     def __call__(self, image):
-#         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-#         image = cv2.resize(image, (224, 224))
-#         image = np.expand_dims(np.array(image), 0) / 255.0
-#         return image
-    
-# class MinMaxNormalize(object):
-#     def __call__(self, tensor):
-#         tensor=tensor.float()
-#         return (tensor - torch.min(tensor)) / (torch.max(tensor) - torch.min(tensor))
-
 class LungUltrasoundDataset(Dataset):
     def __init__(self, d_type, dataframe, exp_dir, clearml=False, transform=None, debug_mode=False, synthetic_df=None, synthetic_perc=0):
         self.dataframe = dataframe[dataframe['data_type'] == d_type]
@@ -29,13 +17,17 @@ class LungUltrasoundDataset(Dataset):
         # Add synthetic data to the training set
         if d_type == 'train' and synthetic_df is not None:
             self.orig_synthetic_df = synthetic_df
-            tot_viral = len(dataframe[dataframe['label_name'] == 'viral'])  # Get the number of 'viral' samples
+            # tot_viral = len(self.dataframe[self.dataframe['label_name'] == 'viral'])  # Get the number of 'viral' samples
+            tot_fake = len(self.orig_synthetic_df)
             if synthetic_perc > 0:
-                n_synth = int((synthetic_perc / 100) * tot_viral)
-                self.sampled_synthetic_df = self.orig_synthetic_df.sample(n=n_synth, replace=True)  # Sample with replacement for oversampling
+                # n_synth = int((synthetic_perc / 100) * tot_viral)
+                n_synth = int((synthetic_perc / 100) * tot_fake)
+                self.sampled_synthetic_df = self.orig_synthetic_df.sample(n=n_synth, replace=False)  # Sample with replacement for oversampling
                 # Add 'data_type' column to synthetic_df
                 self.sampled_synthetic_df['data_type'] = 'train'
                 print(f'Added {n_synth} frames to the data.')
+
+                self.sampled_synthetic_df['image_path'] = self.sampled_synthetic_df['image_path'].str.replace('/Users/amitaylev/Desktop/Amitay/Msc/4th semester/ML4Health/Final project/ddpm_experiments/', '/home/lamitay/uls_experiments/ddpm/')
 
                 self.sampled_synthetic_df['fake'] = 1
                 self.dataframe['fake'] = 0
@@ -67,7 +59,7 @@ class LungUltrasoundDataset(Dataset):
             print(f'Debug mode, squeezed {d_type} data from {len(self.dataframe)} to {DEBUG_SIZE}')
 
         if exp_dir:
-            df_out_path = os.path.join(exp_dir, 'dataframes', d_type+'_df.csv')
+            df_out_path = os.path.join(exp_dir, 'dataframes', d_type + f'_synth_perc_{synthetic_perc}_df.csv')
             self.dataframe.to_csv(df_out_path, index=False)
             print(f'Saved {d_type} dataframe to {df_out_path}')
 
