@@ -120,8 +120,6 @@ def main(args):
             model = models.vit_b_16()
         penultimate_layer = model.heads.head.in_features
         model.head = nn.Linear(penultimate_layer, NUM_CLASSES)
-    elif model_type == 'efficient_net':
-        model = timm.create_model('efficientnet_b0', pretrained=pretrained, num_classes=NUM_CLASSES)
     else:
         print('Unrecognized model type')
         exit()
