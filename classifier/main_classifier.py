@@ -49,6 +49,7 @@ def main(args):
     synthetic_df_path = args.synthetic_df_path
     synthetic_perc = args.synthetic_perc
     get_embedd = args.get_embedd
+    weight_loss = args.weight_loss
 
     # Initialize experiment name and dirs
     timestamp = datetime.now().strftime("%Y%m%d_%H_%M_%S")
@@ -114,14 +115,22 @@ def main(args):
         model = models.resnet50(pretrained=pretrained)
         penultimate_layer = model.fc.in_features
         model.fc = nn.Linear(penultimate_layer, NUM_CLASSES)
+
     elif model_type == 'vit':
         # model = models.vision_transformer.vit_small_patch16_224(pretrained=pretrained)
         if pretrained:
             model = models.vit_b_16(weights=['ViT_B_16_Weights'])
         else:
             model = models.vit_b_16()
-        penultimate_layer = model.heads.head.in_features
-        model.head = nn.Linear(penultimate_layer, NUM_CLASSES)
+
+        # Remove the original head
+        del model.heads.head
+        # Add the new head
+        penultimate_layer = 768  # This should match the in_features of the original head
+        # penultimate_layer = model.heads.head.in_features
+        model.heads.head = nn.Linear(penultimate_layer, NUM_CLASSES)
+        model.num_classes = NUM_CLASSES
+
     else:
         print('Unrecognized model type')
         exit()
@@ -141,7 +150,18 @@ def main(args):
     if optimizer == 'AdamW':
         optimizer = optim.AdamW(model.parameters(), lr=lr)
     if loss == 'ce':    
-        criterion = nn.CrossEntropyLoss()
+        if weight_loss:
+            # Class counts (training set class distribution - regular, covid, pneumonia, viral pneumonia)
+            counts = [814, 571, 468, 27]
+            # Calculate total count
+            total_count = sum(counts)
+            # Calculate weights
+            weights = [total_count / count for count in counts]
+            # Convert to tensor
+            weights_tensor = torch.tensor(weights, dtype=torch.float32).to(device)  
+            criterion = nn.CrossEntropyLoss(weight=weights_tensor)
+        else:
+            criterion = nn.CrossEntropyLoss()
     if lr_scheduler == 'ReduceLROnPlateau':
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, verbose=True)
     
@@ -150,7 +170,7 @@ def main(args):
     print('Started training!')
     trainer.train()
     print('Finished training, Started test set evaluation!')
-    trainer.evaluate(data_type='test')
+    trainer.evaluate(data_type='test', ckpt='/home/lamitay/uls_experiments/classifier/uls_inv_clsfr_ddpm-viral_uls_resnet50_synthetic_perc_100_pretrained_False_lr_1e-05_20231021_15_59_39/models/epoch_9_model.pth')
     print('Finished experiment!')
 
 
@@ -162,26 +182,28 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument('--loss', type=str, default='ce', help='Loss function name, can be - ce')
-    parser.add_argument('--model_type', type=str, default='vit', help='Model type, can be - resnet50/vit/efficient_net')
+    parser.add_argument('--model_type', type=str, default='resnet50', help='Model type, can be - resnet50/vit/efficient_net')
     parser.add_argument('--pretrained', action='store_true', default=False, help='Use imagenet pretrained weights')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Optimizer name, can be - AdamW')
     parser.add_argument('--lr_scheduler', type=str, default='ReduceLROnPlateau', help='LR scheduler name, can be - ReduceLROnPlateau')
     parser.add_argument('--early_stopping', type=int, default=10, help='If greater than 0, perform early stopping patience')
-    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--device_num', type=int, default='0', help='Cuda device to use')
     parser.add_argument('--num_layers_to_fine_tune', type=int, default=-1, help='If greater than 0, fine tune only this amount of final layers, otherwise train all layers')
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode flag')
     parser.add_argument('--clearml', action='store_true', default=True, help='Create and log experiment to clearml')
-    # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
+    parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr', help='Current experiment name')
+    # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_weight_loss', help='Current experiment name')
+    # parser.add_argument('--synthetic_df_path', type=str, default=None)
+
     # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_ddpm-viral_3_mix_images', help='Current experiment name')
     # parser.add_argument('--synthetic_df_path', type=str, default='/home/lamitay/uls_experiments/ddpm/inference_1000_samples_ddpm-viral_3_mix_images_uls-128_3000_epochs_23_09_2023-13_56_11/synthetic_viral_uls_data_ddpm-viral_3_mix_images_uls-128_3000_epochs.csv', help='Path to the synthetic data df')
-    parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_ddpm-viral_uls', help='Current experiment name')
-    parser.add_argument('--synthetic_df_path', type=str, default='/home/lamitay/uls_experiments/ddpm/inference_1000_samples_ddpm-viral_uls-128_2000_epochs_23_09_2023-13_56_04/synthetic_viral_uls_data_ddpm-ddpm-viral_uls-128_2000_epochs.csv', help='Path to the synthetic data df')
-    parser.add_argument('--synthetic_perc', type=float, default=100, help='Percent of synthetic data to add to the viral class training set')
+    # parser.add_argument('--exp_name', type=str, default='uls_inv_clsfr_ddpm-viral_uls', help='Current experiment name')
+    # parser.add_argument('--synthetic_df_path', type=str, default='/home/lamitay/uls_experiments/ddpm/inference_1000_samples_ddpm-viral_uls-128_2000_epochs_23_09_2023-13_56_04/synthetic_viral_uls_data_ddpm-ddpm-viral_uls-128_2000_epochs.csv', help='Path to the synthetic data df')
+    
+    parser.add_argument('--synthetic_perc', type=float, default=0, help='Percent of synthetic data to add to the viral class training set')
     parser.add_argument('--get_embedd', action='store_true', default=False, help='Create and save embeddings')
-
-
-
+    parser.add_argument('--weight_loss', action='store_true', default=False, help='Calculate and use weight loss')
 
     args = parser.parse_args()
 
