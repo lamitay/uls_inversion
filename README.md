@@ -1,4 +1,4 @@
-*This is the repo for my final project in the graduate course "Machine Learning 4 Health" in the faculty of Data Science, Technion*
+*This is the repo for my final project in the graduate course "Machine Learning 4 Health" in the faculty of Data Science, Technion.*
 
 # Augmenting Lung Ultrasound with Synthetic Data: A Novel Application of Textual Inversion and Denoising Diffusion Probabilistic Models
 
