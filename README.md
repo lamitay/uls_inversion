@@ -18,7 +18,7 @@ The code is comprised of 2 main sections:
 The data in this project is based on the open-source [COVID-19 lung ultrasound dataset](https://github.com/jannisborn/covid19_ultrasound/tree/master/data).
 
 ## Acknowledgements
-**The course staff:**
-Proffesor Uri Shalit and Bar Eini-Porat
+**Course staff:**
+Professor Uri Shalit and Bar Eini-Porat
 
 
