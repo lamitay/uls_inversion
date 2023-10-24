@@ -1,4 +1,4 @@
-# Textual inversion and DDPM training and usage
+# Textual inversion and DDPM code usage instructions
 + autopipeline_tutorial.ipynb - tutorial for onboarding to the diffusers library automatic pipeline from huggingface.
 + basic_training.ipynb - notebook for training DDPMs.
 + basic_training_script.py - python script for training DDPMs.
