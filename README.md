@@ -1,4 +1,4 @@
-*This is a final project for a graduate course in AI 4 Healthcare in the Technion.*
+*This is the repo for my final project in the graduate course "Machine Learning 4 Health" in the faculty of Data Science, Technion*
 
 # Augmenting Lung Ultrasound with Synthetic Data: A Novel Application of Textual Inversion and Denoising Diffusion Probabilistic Models
 
@@ -11,11 +11,14 @@
 
 ## Usage
 The code is comprised of 2 main sections:
-1. Classifier - all code used to train and evaluate the classification models.
-2. Textual inversion - all code used to train and generate synthetic images using Textual inversion and DDPMs.
+1. Classifier - code used to train and evaluate the classification models.
+2. Textual_inversion - code used to train and generate synthetic images using textual inversion and DDPMs.
 
 ## Data
-The data in this project is based on the open-source [COVID-19 lung ultrasound dataset](https://github.com/jannisborn/covid19_ultrasound/tree/master/data)
+The data in this project is based on the open-source [COVID-19 lung ultrasound dataset](https://github.com/jannisborn/covid19_ultrasound/tree/master/data).
 
+## Acknowledgements
+**The course staff:**
+Proffesor Uri Shalit and Bar Eini-Porat
 
 
